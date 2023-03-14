@@ -1,3 +1,4 @@
+import shutil
 import json
 import re
 import os
@@ -6,16 +7,24 @@ import pandas as pd
 import tiktoken
 import numpy as np
 from openai.embeddings_utils import distances_from_embeddings
+import time
+
+class ChunkFullError(Exception):
+    pass
 
 COMPLETIONS_MODEL = "text-davinci-003"
 EMBEDDING_MODEL = "text-embedding-ada-002"
-
+source_file = '/home/sanchit/crawler/try1/processed/output.csv'
+destination_dir = '/home/sanchit/crawler/try1/processed_stack'
+current_timestamp = int(time.time())
+new_filename = '% s_output.csv'%current_timestamp
 sub = {}
 head = {}
 obj = {}
 
-root_dir = '<local_repo_path>'
-currentPath = ''
+root_dir = '/home/sanchit/crawler/docs'
+# root_dir = '/home/sanchit/crawler/try1/doc'
+currentPath = '../docs/docs/basics/staking/how_to_stake.md'
 
 md_files = []
 Quit_flag = False
@@ -78,13 +87,6 @@ def getSubHeadingContent(text, subHeading1, subHeading2):
     return subContent
 
 
-def getSubSubHeadingContent(subSub1, subSub2, text):
-    startIndex = text.rindex(subSub1) + len(subSub1)
-    endIndex = len(text) if subSub2 == None else text.index(
-        subSub2) - 4
-    return text[startIndex:endIndex]
-
-
 def removeCodeBlocks(text):
     return re.sub('`.*?`', '', text, flags=re.DOTALL)
 
@@ -140,13 +142,12 @@ def convertLinks(text):
 def remove_newlines(serie):
     serie = serie.replace('\n', ' ')
     serie = serie.replace('\\n', ' ')
-    serie = serie.replace('  ', ' ')
-    serie = serie.replace('  ', ' ')
+    serie = re.sub(r'\s{2,}', ' ', serie.strip())
     return serie
 
 
-def getTitleContent(text, heading1, title):
-    startIndex = text.rindex(title) + len(title)
+def getTitleContent(text, heading1):
+    startIndex = 0
     endIndex = len(text) if heading1 == None else (text.index(heading1) - 3)
     content = text[startIndex:endIndex]
     return content
@@ -258,7 +259,7 @@ def answer_question(
             stop=stop_sequence,
             model=COMPLETIONS_MODEL,
         )
-        
+
         return response["choices"][0]["text"].strip()
     except Exception as e:
         print(e)
@@ -305,13 +306,18 @@ def processAllHeadings():
     if os.path.exists('processed_files.json'):
         with open('processed_files.json', 'r') as f:
             processed_files = set(json.load(f))
-    findAllMDPaths('<local_repo_path>')
-    flag = 1
+    findAllMDPaths(root_dir)
+    new_run = True
+    flag = 0
+    count = 0
     for path in md_files:
         JSONOBJ = {}
         global sub, head
         sub = {}
         head = {}
+        if count == 10:
+            break
+            # raise ChunkFullError("The chunk is full, cannot add another item.")
         if path in processed_files:
             print("Skipping %s (already processed)" % path)
             continue
@@ -322,9 +328,12 @@ def processAllHeadings():
         print("Processing % s" % path)
         setCurrentPath(path)
         md_text = getCleanTextFromMd(currentPath)
-        
         headings = getHeadings(md_text)
-        
+        # print(headings)
+        head[getTitle(md_text)] = getTitleContent(
+            md_text, None if len(headings) == 0 else headings[0])
+        if len(headings) == 0 :
+            JSONOBJ[getTitle(md_text)] = head
         for i in range(0, len(headings)):
             JSONOBJ[getTitle(md_text)] = head
             getHeadingContent(
@@ -334,9 +343,10 @@ def processAllHeadings():
         df = pd.DataFrame.from_dict(JSONOBJ, orient='index')
         df = df.reset_index()
         df = pd.melt(df, id_vars=['index'])
-        df['variable'] = df.variable + ". " + remove_newlines(df.value)
+        df['variable'] = df.variable + ". " + \
+            df['value'].apply(remove_newlines)  # remove_newlines(df.value)
         df = df.iloc[:, :-1]
-        
+
         # Write dataframe to CSV file
         if flag == 0:
             df.to_csv('processed/output.csv', index=False,
@@ -345,55 +355,58 @@ def processAllHeadings():
         else:
             df.to_csv('processed/output.csv', mode='a',
                       index=False, header=False)
-        
+        count+=1
+        processed_files.add(path)   
 
-        df = pd.read_csv('processed/output.csv', index_col=0)
-        
-        df['n_tokens'] = df.text.apply(lambda x: len(tokenizer.encode(x)))
+    df = pd.read_csv('processed/output.csv', index_col=0)
+    df['n_tokens'] = df.text.apply(lambda x: len(tokenizer.encode(x)))
 
-        shortened = []
+    print("creating embeddings...")
+    shortened = []
 
-        # Loop through the dataframe
-        for row in df.iterrows():
+    # Loop through the dataframe
+    for row in df.iterrows():
 
-            # If the text is None, go to the next row
-            if row[1]['text'] is None:
-                continue
+        # If the text is None, go to the next row
+        if row[1]['text'] is None:
+            continue
 
-            # If the number of tokens is greater than the max number of tokens, split the text into chunks
-            if row[1]['n_tokens'] > max_tokens:
-                shortened += split_into_many(row[1]['text'])
+        # If the number of tokens is greater than the max number of tokens, split the text into chunks
+        if row[1]['n_tokens'] > max_tokens:
+            shortened += split_into_many(row[1]['text'])
 
-            # Otherwise, add the text to the list of shortened texts
-            else:
-                shortened.append(row[1]['text'])
-
-        df = pd.DataFrame(shortened, columns=['text'])
-        df['n_tokens'] = df.text.apply(lambda x: len(tokenizer.encode(x)))
-
-        df['embeddings'] = df.text.apply(lambda x: openai.Embedding.create(
-            input=x, engine='text-embedding-ada-002')['data'][0]['embedding'])
-        if flag == 0:
-            df.to_csv('processed/embeddings.csv')
-            flag = 1
+        # Otherwise, add the text to the list of shortened texts
         else:
-            df.to_csv('processed/embeddings.csv', mode='a', header=False)
+            shortened.append(row[1]['text'])
 
-        processed_files.add(path)
-        with open('processed_files.json', 'w') as f:
-            json.dump(list(processed_files), f)
+    df = pd.DataFrame(shortened, columns=['text'])
+    df['n_tokens'] = df.text.apply(lambda x: len(tokenizer.encode(x)))
+
+    df['embeddings'] = df.text.apply(lambda x: openai.Embedding.create(
+        input=x, engine=EMBEDDING_MODEL)['data'][0]['embedding'])
+    df.to_csv('processed/embeddings.csv', mode='a', header=False)
+
+    print('\nDone.\n')
+    flag = 0
+    shutil.copy2(source_file, f'{destination_dir}/{new_filename}')
+    print('output.csv added to processed_stack')
+    with open('processed_files.json', 'w') as f:
+        json.dump(list(processed_files), f)
+    raise ChunkFullError("\nPicking other 10 files...")
 
 
-
+# processAllHeadings()
 while not Quit_flag:
     try:
         processAllHeadings()
     except KeyboardInterrupt:
         print("Process terminated by user.")
         break
+    except ChunkFullError as e:
+        print("% s\n\n"%e)
+        continue
     except Exception as e:
-        print(f"Error occurred: {e}")       
+        print(f"Error occurred: {e}")
         continue
     else:
         break
-
