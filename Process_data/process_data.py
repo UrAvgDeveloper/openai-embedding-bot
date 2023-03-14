@@ -16,16 +16,15 @@ class Done(Exception):
     pass
 COMPLETIONS_MODEL = "text-davinci-003"
 EMBEDDING_MODEL = "text-embedding-ada-002"
-source_file = '/home/sanchit/crawler/try1/processed/output.csv'
-destination_dir = '/home/sanchit/crawler/try1/processed_stack'
+source_file = '~/crawler/try1/processed/output.csv'
+destination_dir = '~/crawler/try1/processed_stack'
 current_timestamp = int(time.time())
 new_filename = '% s_output.csv'%current_timestamp
 sub = {}
 head = {}
 obj = {}
 
-root_dir = '/home/sanchit/crawler/docs'
-# root_dir = '/home/sanchit/crawler/try1/doc'
+root_dir = '~/crawler/docs'
 currentPath = '../docs/docs/basics/staking/how_to_stake.md'
 
 md_files = []
