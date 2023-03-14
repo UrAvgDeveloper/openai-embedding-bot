@@ -355,7 +355,7 @@ def processAllHeadings():
         count+=1
         processed_files.add(path)  
 
-    if len(processed_files) == len(md_files):
+    if len(processed_files) >= len(md_files):
             print("All files have been processed.")
             global Quit_flag
             Quit_flag = True

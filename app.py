@@ -11,8 +11,9 @@ import numpy as np
 COMPLETIONS_MODEL = "text-davinci-003"
 EMBEDDING_MODEL = "text-embedding-ada-002"
 
-df=pd.read_csv('~/crawler/try1/processed/embeddings.csv', index_col=0)
+df = pd.read_csv('~/crawler/try1/processed/embeddings.csv', index_col=0)
 df['embeddings'] = df['embeddings'].apply(eval).apply(np.array)
+
 
 def answer_question(
     question,
@@ -39,38 +40,34 @@ def answer_question(
         print("\n\n")
 
     try:
-        # messages = [
-        #     {"role": "system", "content": f"You are a helpful assistant."},
-        #     {"role": "user", "content": "How can i see details of any validator?"},
-        #     {"role": "assistant",
-        #         "content": "To see details of validator visit page https://explore.fetch.ai/validators"},
-        #     {"role": "user", "content": "on what basis rewards are paid?"},
-        #     {"role": "assistant",
-        #         "content": "Rewards are paid on a per-block basis and added to the existing pending rewards"}
-        # ]
+        messages = [
+            {"role": "system", "content": f"Answer the question based on the {context}, and if the question can't be answered based on the context, say \"I don't know\""},
+            {"role": "user", "content": "how to To Claim your Rewards Using the Fetch Wallet?"},
+            {"role": "assistant",
+                "content": "1. Ensure you are logged into your Fetch wallet at /basics/wallet/getting_started.2. From the wallet dashboard select **Claim**.3. The wallet shows you a summary of the transaction. Review it, select a transaction fee, and if you are happy, hit **Approve** to complete the operation.You should now see the rewards added to your **Total Balance**."},
+            {"role": "user", "content": "list type of blockchains?"},
+            {"role": "assistant",
+                "content": "We can distinguish among public, private, consortium and hybrid blockchains."},
+            {"role": "user", "content": f"{question}"},
+
+        ]
         # Create a completions using the questin and context
-        # response = openai.ChatCompletion.create(
-        #     model=model,
-        #     messages=[context, messages],
-        #     temperature=0,
-        #     stop='\n\n###\n\n'
-        # )
-        response = openai.Completion.create(
-            prompt=f"Answer the question based on the context below, and if the question can't be answered based on the context, say \"I don't know\"\n\nContext: {context}\n\n---\n\nQuestion: {question}\nAnswer:",
+        response = openai.ChatCompletion.create(
+            model=model,
+            messages=messages,
             temperature=0,
-            max_tokens=max_tokens,
             top_p=1,
             frequency_penalty=0,
             presence_penalty=0,
-            stop='\n\n###\n\n',
-            model="text-davinci-003",
+            stop='\n\n###\n\n'
         )
-        # print("response================================================================> ",response)
-        return response["choices"][0]["text"].strip()
+       
+        return response["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(e)
         return ""
-    
+
+
 def get_embedding(text: str, model: str = EMBEDDING_MODEL):
     result = openai.Embedding.create(
         model=model,
@@ -88,6 +85,7 @@ def compute_doc_embeddings(df: pd.DataFrame):
     return {
         idx: get_embedding(r.text) for idx, r in df.iterrows()
     }
+
 
 def create_context(
     question, df, max_len=1800, size="ada"
@@ -123,13 +121,10 @@ def create_context(
     return "\n\n###\n\n".join(returns)
 
 
-
-
 # df.head()
 # result = answer_question(
 #             df, question="how to To Claim your Rewards Using the Fetch Wallet?", debug=False)
 # print("answer =>",result)
-        
 
 
 app = Flask(__name__)
@@ -140,10 +135,8 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 def index():
     if request.method == "POST":
         question = request.form["question"]
-        print("question =>",question)
+        print("question =>", question)
         return redirect(url_for("index", result=answer_question(question, debug=False)))
 
     result = request.args.get("result")
     return render_template("index.html", result=result)
-
-
