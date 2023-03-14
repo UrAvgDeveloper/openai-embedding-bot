@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<head>
+  <title>Quickstart</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}" />
+</head>
+
+<body>
+  <h3>Answer my question</h3>
+  <form action="/" method="post">
+    <input type="text" name="question" placeholder="Enter question" required />
+    <input type="submit" value="Generate answer" />
+  </form>
+  {% if result %}
+  <div class="result">{{ result }}</div>
+  {% endif %}
+</body>
