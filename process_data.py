@@ -254,7 +254,6 @@ def create_context(
     # Get the distances from the embeddings
     df['distances'] = distances_from_embeddings(
         q_embeddings, df['embeddings'].values, distance_metric='cosine')
-    # print(question)
     returns = []
     cur_len = 0
 
@@ -282,7 +281,6 @@ def processAllHeadings():
         with open('processed_files.json', 'r') as f:
             processed_files = set(json.load(f))
     findAllMDPaths(root_dir)
-    print(md_files)
     flag = 0
     count = 0
     allowed = False
@@ -373,7 +371,7 @@ def processAllHeadings():
         print("Files processed => % s"%len(processed_files) )
 
     # Check if all files are processed
-    if len(processed_files) >= len(md_files) and path in processed_files:
+    if len(processed_files) >= len(md_files):
             print("All files have been processed.")
             global Quit_flag
             Quit_flag = True
