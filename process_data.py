@@ -9,26 +9,29 @@ import numpy as np
 from openai.embeddings_utils import distances_from_embeddings
 import time
 
-class ChunkFullError(Exception):
+class ChunkFull(Exception):
     pass
 
 class Done(Exception):
     pass
+
+
 COMPLETIONS_MODEL = "text-davinci-003"
 EMBEDDING_MODEL = "text-embedding-ada-002"
-source_file = '~/crawler/try1/processed/output.csv'
-destination_dir = '~/crawler/try1/processed_stack'
+source_file = f"{os.path.dirname(os.path.abspath(__file__))}/processed/output.csv"
+destination_dir = f"{os.path.dirname(os.path.abspath(__file__))}/processed/processed_stack"
 current_timestamp = int(time.time())
 new_filename = '% s_output.csv'%current_timestamp
 sub = {}
 head = {}
 obj = {}
 
-root_dir = '~/crawler/docs'
-currentPath = '../docs/docs/basics/staking/how_to_stake.md'
+root_dir = f"{os.path.dirname(os.path.abspath(__file__))}/docs"
+currentPath = f"{root_dir}/staking/how_to_stake.md"
 
 md_files = []
 Quit_flag = False
+
 # Files to ignore while traversing
 ignoreFile = ['README.md', 'CODE_OF_CONDUCT.md']
 
@@ -96,16 +99,13 @@ def getHeadingContent(text, heading1, heading2):
     startIndex = text.rindex(heading1) + len(heading1)
     endIndex = len(text) if heading2 == None else (text.index(heading2) - 3)
     content = text[startIndex:endIndex]
-    # check for subheading
     subHeadings = checkForSubHeading(content)
-    # print(subHeadings)
 
     if len(subHeadings) != 0:
         head[heading1] = ""
         for i in range(0, len(subHeadings)):
             subContent = getSubHeadingContent(
                 content, subHeadings[i], subHeadings[i+1] if i+1 < len(subHeadings) else None)
-            # sub[subHeadings[i]] = subContent
             head[heading1] = head[heading1] + "," + \
                 subHeadings[i] + ":" + subContent
     else:
@@ -117,14 +117,6 @@ def checkForSubHeading(text):
     sub_headings = re.findall(sub_heading_pattern, text, re.MULTILINE)
     return sub_headings
 
-
-def checkForSubSubHeading(text):
-    sub_heading_pattern = r'^#### (.*)$'
-    sub_headings = re.findall(sub_heading_pattern, text, re.MULTILINE)
-    # print(sub_headings)
-    return sub_headings
-
-
 def removeImages(text):
     pattern = r"!\[.*\]\(.*\)"
     return re.sub(pattern, "", text)
@@ -133,8 +125,6 @@ def removeImages(text):
 def convertLinks(text):
     # Regex pattern to match links in markdown format
     pattern = r"\[([^\]]+)\]\(([^\)]+)\)"
-
-    # Replace each match with the desired format
     converted_text = re.sub(pattern, r"\1 at \2", text)
 
     return converted_text
@@ -212,7 +202,7 @@ def compute_doc_embeddings(df: pd.DataFrame):
 def answer_question(
     df,
     question,
-    model="gpt-3.5-turbo",
+    model=COMPLETIONS_MODEL,
     max_len=1800,
     size="ada",
     debug=False,
@@ -234,22 +224,6 @@ def answer_question(
         print("\n\n")
 
     try:
-        # messages = [
-        #     {"role": "system", "content": f"You are a helpful assistant."},
-        #     {"role": "user", "content": "How can i see details of any validator?"},
-        #     {"role": "assistant",
-        #         "content": "To see details of validator visit page https://explore.fetch.ai/validators"},
-        #     {"role": "user", "content": "on what basis rewards are paid?"},
-        #     {"role": "assistant",
-        #         "content": "Rewards are paid on a per-block basis and added to the existing pending rewards"}
-        # ]
-        # Create a completions using the questin and context
-        # response = openai.ChatCompletion.create(
-        #     model=model,
-        #     messages=[context, messages],
-        #     temperature=0,
-        #     stop='\n\n###\n\n'
-        # )
         response = openai.Completion.create(
             prompt=f"Answer the question based on the context below, and if the question can't be answered based on the context, say \"I don't know\"\n\nContext: {context}\n\n---\n\nQuestion: {question}\nAnswer:",
             temperature=0,
@@ -258,7 +232,7 @@ def answer_question(
             frequency_penalty=0,
             presence_penalty=0,
             stop=stop_sequence,
-            model=COMPLETIONS_MODEL,
+            model=model,
         )
 
         return response["choices"][0]["text"].strip()
@@ -308,8 +282,10 @@ def processAllHeadings():
         with open('processed_files.json', 'r') as f:
             processed_files = set(json.load(f))
     findAllMDPaths(root_dir)
+    print(md_files)
     flag = 0
     count = 0
+    allowed = False
     for path in md_files:
         JSONOBJ = {}
         global sub, head
@@ -317,10 +293,12 @@ def processAllHeadings():
         head = {}
         if count == 10:
             break
-            # raise ChunkFullError("The chunk is full, cannot add another item.")
         if path in processed_files:
-            # print("Skipping %s (already processed)" % path)
+            print("Skipping %s (already processed)" % path)
+            allowed = False
             continue
+        else:
+            allowed = True
         
         print("Processing % s" % path)
         setCurrentPath(path)
@@ -353,55 +331,55 @@ def processAllHeadings():
             df.to_csv('processed/output.csv', mode='a',
                       index=False, header=False)
         count+=1
-        processed_files.add(path)  
+        processed_files.add(path) 
 
-    if len(processed_files) == len(md_files):
+    if allowed : 
+        df = pd.read_csv('processed/output.csv', index_col=0)
+        df['n_tokens'] = df.text.apply(lambda x: len(tokenizer.encode(x)))
+
+        print("creating embeddings...")
+        shortened = []
+
+        # Loop through the dataframe
+        for row in df.iterrows():
+
+            # If the text is None, go to the next row
+            if row[1]['text'] is None:
+                continue
+
+            # If the number of tokens is greater than the max number of tokens, split the text into chunks
+            if row[1]['n_tokens'] > max_tokens:
+                shortened += split_into_many(row[1]['text'])
+
+            # Otherwise, add the text to the list of shortened texts
+            else:
+                shortened.append(row[1]['text'])
+
+        df = pd.DataFrame(shortened, columns=['text'])
+        df['n_tokens'] = df.text.apply(lambda x: len(tokenizer.encode(x)))
+
+        df['embeddings'] = df.text.apply(lambda x: openai.Embedding.create(
+            input=x, engine=EMBEDDING_MODEL)['data'][0]['embedding'])
+        df.to_csv('processed/embeddings.csv', mode='a', header=False)
+
+        print('\nDone.\n')
+        flag = 0
+        current_timestamp = int(time.time())
+        new_filename = '% s_output.csv'%current_timestamp
+        shutil.copy2(source_file, f'{destination_dir}/{new_filename}')
+        print('output.csv added to processed_stack')
+        with open('processed_files.json', 'w') as f:
+            json.dump(list(processed_files), f)
+        print("Files processed => % s"%len(processed_files) )
+
+    # Check if all files are processed
+    if len(processed_files) >= len(md_files) and path in processed_files:
             print("All files have been processed.")
             global Quit_flag
             Quit_flag = True
             raise Done("\n\ndone processing all files.exiting......")
     
-
-    df = pd.read_csv('processed/output.csv', index_col=0)
-    df['n_tokens'] = df.text.apply(lambda x: len(tokenizer.encode(x)))
-
-    print("creating embeddings...")
-    shortened = []
-
-    # Loop through the dataframe
-    for row in df.iterrows():
-
-        # If the text is None, go to the next row
-        if row[1]['text'] is None:
-            continue
-
-        # If the number of tokens is greater than the max number of tokens, split the text into chunks
-        if row[1]['n_tokens'] > max_tokens:
-            shortened += split_into_many(row[1]['text'])
-
-        # Otherwise, add the text to the list of shortened texts
-        else:
-            shortened.append(row[1]['text'])
-
-    df = pd.DataFrame(shortened, columns=['text'])
-    df['n_tokens'] = df.text.apply(lambda x: len(tokenizer.encode(x)))
-
-    df['embeddings'] = df.text.apply(lambda x: openai.Embedding.create(
-        input=x, engine=EMBEDDING_MODEL)['data'][0]['embedding'])
-    df.to_csv('processed/embeddings.csv', mode='a', header=False)
-
-    print('\nDone.\n')
-    flag = 0
-    current_timestamp = int(time.time())
-    new_filename = '% s_output.csv'%current_timestamp
-    shutil.copy2(source_file, f'{destination_dir}/{new_filename}')
-    print('output.csv added to processed_stack')
-    with open('processed_files.json', 'w') as f:
-        json.dump(list(processed_files), f)
-    print("Files processed => % s"%len(processed_files) )
-
-    
-    raise ChunkFullError("\nPicking other 10 files...")
+    raise ChunkFull("\nPicking other 10 files...")
 
 
 # processAllHeadings()
@@ -416,7 +394,7 @@ while not Quit_flag:
     except Done:
         print("Process terminated by system.")
         break
-    except ChunkFullError as e:
+    except ChunkFull as e:
         print("% s\n\n"%e)
         continue
     except Exception as e:
