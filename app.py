@@ -17,12 +17,12 @@ df['embeddings'] = df['embeddings'].apply(eval).apply(np.array)
 def answer_question(
     question,
     df=df,
-    model="gpt-3.5-turbo",
+    model=COMPLETIONS_MODEL,
     max_len=1800,
     size="ada",
     debug=False,
     max_tokens=500,
-    stop_sequence=None
+    stop_sequence='\n\n###\n\n'
 ):
     """
     Answer a question based on the most similar context from the dataframe texts
@@ -39,22 +39,6 @@ def answer_question(
         print("\n\n")
 
     try:
-        # messages = [
-        #     {"role": "system", "content": f"You are a helpful assistant."},
-        #     {"role": "user", "content": "How can i see details of any validator?"},
-        #     {"role": "assistant",
-        #         "content": "To see details of validator visit page https://explore.fetch.ai/validators"},
-        #     {"role": "user", "content": "on what basis rewards are paid?"},
-        #     {"role": "assistant",
-        #         "content": "Rewards are paid on a per-block basis and added to the existing pending rewards"}
-        # ]
-        # Create a completions using the questin and context
-        # response = openai.ChatCompletion.create(
-        #     model=model,
-        #     messages=[context, messages],
-        #     temperature=0,
-        #     stop='\n\n###\n\n'
-        # )
         response = openai.Completion.create(
             prompt=f"Answer the question based on the context below, and if the question can't be answered based on the context, say \"I don't know\"\n\nContext: {context}\n\n---\n\nQuestion: {question}\nAnswer:",
             temperature=0,
@@ -62,10 +46,9 @@ def answer_question(
             top_p=1,
             frequency_penalty=0,
             presence_penalty=0,
-            stop='\n\n###\n\n',
-            model="text-davinci-003",
+            stop=stop_sequence,
+            model=model,
         )
-        # print("response================================================================> ",response)
         return response["choices"][0]["text"].strip()
     except Exception as e:
         print(e)
@@ -121,15 +104,6 @@ def create_context(
 
     # Return the context
     return "\n\n###\n\n".join(returns)
-
-
-
-
-# df.head()
-# result = answer_question(
-#             df, question="how to To Claim your Rewards Using the Fetch Wallet?", debug=False)
-# print("answer =>",result)
-        
 
 
 app = Flask(__name__)
