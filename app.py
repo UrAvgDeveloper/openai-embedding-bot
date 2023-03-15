@@ -8,11 +8,12 @@ import openai
 import pandas as pd
 import numpy as np
 
-COMPLETIONS_MODEL = "text-davinci-003"
+COMPLETIONS_MODEL = "gpt-3.5-turbo"
 EMBEDDING_MODEL = "text-embedding-ada-002"
 
-df=pd.read_csv('~/crawler/try1/processed/embeddings.csv', index_col=0)
+df = pd.read_csv('~/crawler/try1/processed/embeddings.csv', index_col=0)
 df['embeddings'] = df['embeddings'].apply(eval).apply(np.array)
+
 
 def answer_question(
     question,
@@ -39,21 +40,35 @@ def answer_question(
         print("\n\n")
 
     try:
-        response = openai.Completion.create(
-            prompt=f"Answer the question based on the context below, and if the question can't be answered based on the context, say \"I don't know\"\n\nContext: {context}\n\n---\n\nQuestion: {question}\nAnswer:",
+        messages = [
+            {"role": "system", "content": f"Answer the question based on the {context} only, and if the question can't be answered based on the context, say \"I don't know\""},
+            {"role": "user", "content": "how to To Claim your Rewards Using the Fetch Wallet?"},
+            {"role": "assistant",
+                "content": "1. Ensure you are logged into your Fetch wallet at /basics/wallet/getting_started.2. From the wallet dashboard select **Claim**.3. The wallet shows you a summary of the transaction. Review it, select a transaction fee, and if you are happy, hit **Approve** to complete the operation.You should now see the rewards added to your **Total Balance**."},
+            {"role": "user", "content": "list type of blockchains?"},
+            {"role": "assistant",
+                "content": "We can distinguish among public, private, consortium and hybrid blockchains."},
+            {"role": "user", "content": f"{question}"},
+
+        ]
+        # Create a completions using the questin and context
+        response = openai.ChatCompletion.create(
+            model=model,
+            messages=messages,
             temperature=0,
-            max_tokens=max_tokens,
             top_p=1,
             frequency_penalty=0,
             presence_penalty=0,
             stop=stop_sequence,
-            model=model,
+            max_tokens=max_tokens
         )
-        return response["choices"][0]["text"].strip()
+       
+        return response["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(e)
         return ""
-    
+
+
 def get_embedding(text: str, model: str = EMBEDDING_MODEL):
     result = openai.Embedding.create(
         model=model,
@@ -71,6 +86,7 @@ def compute_doc_embeddings(df: pd.DataFrame):
     return {
         idx: get_embedding(r.text) for idx, r in df.iterrows()
     }
+
 
 def create_context(
     question, df, max_len=1800, size="ada"
@@ -114,10 +130,8 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 def index():
     if request.method == "POST":
         question = request.form["question"]
-        print("question =>",question)
+        print("question =>", question)
         return redirect(url_for("index", result=answer_question(question, debug=False)))
 
     result = request.args.get("result")
     return render_template("index.html", result=result)
-
-
