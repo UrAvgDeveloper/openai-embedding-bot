@@ -14,21 +14,24 @@ class ChunkFullError(Exception):
 
 class Done(Exception):
     pass
+
+
 COMPLETIONS_MODEL = "text-davinci-003"
 EMBEDDING_MODEL = "text-embedding-ada-002"
-source_file = '~/crawler/try1/processed/output.csv'
-destination_dir = '~/crawler/try1/processed_stack'
+source_file = f"{os.path.dirname(os.path.abspath(__file__))}/processed/output.csv"
+destination_dir = f"{os.path.dirname(os.path.abspath(__file__))}/processed/processed_stack"
 current_timestamp = int(time.time())
 new_filename = '% s_output.csv'%current_timestamp
 sub = {}
 head = {}
 obj = {}
 
-root_dir = '~/crawler/docs'
-currentPath = '../docs/docs/basics/staking/how_to_stake.md'
+root_dir = f"{os.path.dirname(os.path.abspath(__file__))}/docs"
+currentPath = f"{root_dir}/staking/how_to_stake.md"
 
 md_files = []
 Quit_flag = False
+
 # Files to ignore while traversing
 ignoreFile = ['README.md', 'CODE_OF_CONDUCT.md']
 
