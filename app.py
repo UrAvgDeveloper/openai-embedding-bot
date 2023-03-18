@@ -25,11 +25,12 @@ def answer_question(
     Answer a question based on the most similar context from the dataframe texts
     """
     context = create_context(
-        question,
+        question + " Also share me the link that will give me more information",
         df,
         # max_len=max_len,
         # size=size,
     )
+
     # If debug, print the raw model response
     if debug:
         print("Context:\n" + context)
@@ -44,7 +45,7 @@ def answer_question(
                   {"role": "system", "content": f"You are a helpful assistant. You must strictly answer the question based on the context below, and if the question can't be answered based on the context or is not related to the context below, say \"This is not related to Fetch.ai\" and nothing else. Also share me the link that will give me more information.\n\nContext: {context}"},
                   {"role": "user", "content": "Question: What is fetch.ai"},
                   {"role": "assistant", "content": "Our mission is to build the infrastructure required for developing modern, decentralized and peer-to-peer (P2P) applications that are free from centralized rent-seeking."},
-                  {"role": "user", "content": f"Question: {question}"}
+                  {"role": "user", "content": f"Question: {question}?Also share me the link that will give me more information."}
               ]
         )
         print("resp", response)
@@ -84,7 +85,6 @@ def create_context(
     # Get the distances from the embeddings
     df['distances'] = distances_from_embeddings(
         q_embeddings, df['embeddings'].values, distance_metric='cosine')
-    # print(question)
     returns = []
     cur_len = 0
 
@@ -113,7 +113,7 @@ def index():
     if request.method == "POST":
         question = request.form["question"]
         print("question =>",question)
-        return redirect(url_for("index", result=answer_question(question, debug=True)))
+        return redirect(url_for("index", result=answer_question(question, debug=False)))
 
     result = request.args.get("result")
     return render_template("index.html", result=result)

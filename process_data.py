@@ -9,8 +9,10 @@ import numpy as np
 from openai.embeddings_utils import distances_from_embeddings
 import time
 
+
 class ChunkFull(Exception):
     pass
+
 
 class Done(Exception):
     pass
@@ -21,12 +23,13 @@ EMBEDDING_MODEL = "text-embedding-ada-002"
 source_file = f"{os.path.dirname(os.path.abspath(__file__))}/processed/output.csv"
 destination_dir = f"{os.path.dirname(os.path.abspath(__file__))}/processed/processed_stack"
 current_timestamp = int(time.time())
-new_filename = '% s_output.csv'%current_timestamp
+new_filename = '% s_output.csv' % current_timestamp
 sub = {}
 head = {}
 obj = {}
 
-root_dir = f"{os.path.dirname(os.path.abspath(__file__))}/docs"
+# f"{os.path.dirname(os.path.abspath(__file__))}/docs"
+root_dir = "/home/sanchit/crawler/docs"
 currentPath = f"{root_dir}/staking/how_to_stake.md"
 
 md_files = []
@@ -40,10 +43,10 @@ tokenizer = tiktoken.get_encoding("cl100k_base")
 max_tokens = 500
 
 
-def findAllMDPaths(root):
+def findAllMDPaths(root, processed_files):
     for subdir, dirs, files in os.walk(root):
         for file in files:
-            if file.endswith('.md') and file not in ignoreFile:
+            if file.endswith('.md') and file not in ignoreFile and file not in processed_files:
                 md_files.append(os.path.relpath(
                     os.path.join(subdir, file), start=os.curdir))
 
@@ -95,7 +98,7 @@ def removeCodeBlocks(text):
     return re.sub('`.*?`', '', text, flags=re.DOTALL)
 
 
-def getHeadingContent(text, heading1, heading2):
+def getHeadingContent(text, heading1, heading2, link):
     startIndex = text.rindex(heading1) + len(heading1)
     endIndex = len(text) if heading2 == None else (text.index(heading2) - 3)
     content = text[startIndex:endIndex]
@@ -106,16 +109,17 @@ def getHeadingContent(text, heading1, heading2):
         for i in range(0, len(subHeadings)):
             subContent = getSubHeadingContent(
                 content, subHeadings[i], subHeadings[i+1] if i+1 < len(subHeadings) else None)
-            head[heading1] = head[heading1] + "," + \
+            head[heading1] = "For more visit " + link + " " + head[heading1] + "," + \
                 subHeadings[i] + ":" + subContent
     else:
-        head[heading1] = content.strip()
+        head[heading1] = "For more visit " + link + " " + content.strip()
 
 
 def checkForSubHeading(text):
     sub_heading_pattern = r'^### (.*)$'
     sub_headings = re.findall(sub_heading_pattern, text, re.MULTILINE)
     return sub_headings
+
 
 def removeImages(text):
     pattern = r"!\[.*\]\(.*\)"
@@ -138,9 +142,10 @@ def remove_newlines(serie):
 
 
 def getTitleContent(text, heading1):
-    startIndex = 0
+    startIndex = 3 if re.match(r"^(?:\s*#|\s*)\s*", text) else 0
     endIndex = len(text) if heading1 == None else (text.index(heading1) - 3)
     content = text[startIndex:endIndex]
+    # print(content)
     return content
 
 
@@ -280,11 +285,16 @@ def processAllHeadings():
     if os.path.exists('processed_files.json'):
         with open('processed_files.json', 'r') as f:
             processed_files = set(json.load(f))
-    findAllMDPaths(root_dir)
+    findAllMDPaths(root_dir, processed_files)
     flag = 0
     count = 0
     allowed = False
     for path in md_files:
+        # print(md_files)
+        url_path = path.replace(
+            "docs/", "").replace("../", "").replace(".md", "")
+        # print(url_path)
+        link = "https://docs.fetch.ai/% s" % url_path.lower()
         JSONOBJ = {}
         global sub, head
         sub = {}
@@ -296,21 +306,26 @@ def processAllHeadings():
             allowed = False
             continue
         else:
+            # print(path)
             allowed = True
-        
+
         print("Processing % s" % path)
         setCurrentPath(path)
         md_text = getCleanTextFromMd(currentPath)
         headings = getHeadings(md_text)
         # print(headings)
-        head[getTitle(md_text)] = getTitleContent(
+        title_content = getTitleContent(
             md_text, None if len(headings) == 0 else headings[0])
-        if len(headings) == 0 :
+        
+        if title_content != None:
+            head[getTitle(md_text)] = "For more visit " + link + title_content
+        
+        if len(headings) == 0:
             JSONOBJ[getTitle(md_text)] = head
         for i in range(0, len(headings)):
             JSONOBJ[getTitle(md_text)] = head
             getHeadingContent(
-                md_text, headings[i], headings[i+1] if i+1 < len(headings) else None)
+                md_text, headings[i], headings[i+1] if i+1 < len(headings) else None, link)
 
         # Convert JSON to dataframe
         df = pd.DataFrame.from_dict(JSONOBJ, orient='index')
@@ -328,10 +343,10 @@ def processAllHeadings():
         else:
             df.to_csv('processed/output.csv', mode='a',
                       index=False, header=False)
-        count+=1
-        processed_files.add(path) 
+        count += 1
+        processed_files.add(path)
 
-    if allowed : 
+    if allowed:
         df = pd.read_csv('processed/output.csv', index_col=0)
         df['n_tokens'] = df.text.apply(lambda x: len(tokenizer.encode(x)))
 
@@ -363,27 +378,28 @@ def processAllHeadings():
         print('\nDone.\n')
         flag = 0
         current_timestamp = int(time.time())
-        new_filename = '% s_output.csv'%current_timestamp
+        new_filename = '% s_output.csv' % current_timestamp
         shutil.copy2(source_file, f'{destination_dir}/{new_filename}')
         print('output.csv added to processed_stack')
         with open('processed_files.json', 'w') as f:
             json.dump(list(processed_files), f)
-        print("Files processed => % s"%len(processed_files) )
+        print("Files processed => % s" % len(processed_files))
 
     # Check if all files are processed
+    # print(len(processed_files), len(md_files))
     if len(processed_files) >= len(md_files):
-            print("All files have been processed.")
-            global Quit_flag
-            Quit_flag = True
-            raise Done("\n\ndone processing all files.exiting......")
-    
+        print("All files have been processed.")
+        global Quit_flag
+        Quit_flag = True
+        raise Done("\n\ndone processing all files.exiting......")
+
     raise ChunkFull("\nPicking other 10 files...")
 
 
 # processAllHeadings()
 while not Quit_flag:
     try:
-        if Quit_flag :
+        if Quit_flag:
             break
         processAllHeadings()
     except KeyboardInterrupt:
@@ -393,7 +409,7 @@ while not Quit_flag:
         print("Process terminated by system.")
         break
     except ChunkFull as e:
-        print("% s\n\n"%e)
+        print("% s\n\n" % e)
         continue
     except Exception as e:
         print(f"Error occurred: {e}")
