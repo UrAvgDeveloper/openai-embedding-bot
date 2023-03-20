@@ -37,19 +37,24 @@ def answer_question(
         print("\n\n")
 
     try:
-        response = openai.ChatCompletion.create(
+        response = "This is not related to Fetch.ai" 
+        print("***************************************************************************************")
+        print(context)
+        if len(context) > 0:
+            response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             temperature=0.5,
             max_tokens=200,
             messages=[
-                  {"role": "system", "content": f"You are a helpful assistant. You must strictly answer the question based on the context below, and if the question can't be answered based on the context or is not related to the context below, say \"This is not related to Fetch.ai\" and nothing else. Also share me the link that will give me more information.\n\nContext: {context}"},
+                  {"role": "system", "content": f"You are a helpful assistant.fetch.ai is all called fetch in shorthand. You must strictly answer the question based on the context below, and if the question can't be answered based on the context or is not related to the context below, only say \"This is not related to Fetch.ai\".\n\nContext: {context}"},
                   {"role": "user", "content": "Question: What is fetch.ai"},
                   {"role": "assistant", "content": "Our mission is to build the infrastructure required for developing modern, decentralized and peer-to-peer (P2P) applications that are free from centralized rent-seeking."},
-                  {"role": "user", "content": f"Question: {question}?Also share me the link that will give me more information."}
+                  {"role": "user", "content": f"Question: {question}?Also share me the link that will give me more information"}
               ]
-        )
+            )
+            return response["choices"][0]["message"]["content"]
         print("resp", response)
-        return response["choices"][0]["message"]["content"]
+        return response
     except Exception as e:
         print(e)
         return ""
@@ -112,7 +117,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 def index():
     if request.method == "POST":
         question = request.form["question"]
-        print("question =>",question)
+        # print("question =>",question)
         return redirect(url_for("index", result=answer_question(question, debug=False)))
 
     result = request.args.get("result")

@@ -28,8 +28,7 @@ sub = {}
 head = {}
 obj = {}
 
-# f"{os.path.dirname(os.path.abspath(__file__))}/docs"
-root_dir = "/home/sanchit/crawler/docs"
+root_dir = f"{os.path.dirname(os.path.abspath(__file__))}/docs"
 currentPath = f"{root_dir}/staking/how_to_stake.md"
 
 md_files = []
@@ -145,7 +144,6 @@ def getTitleContent(text, heading1):
     startIndex = 3 if re.match(r"^(?:\s*#|\s*)\s*", text) else 0
     endIndex = len(text) if heading1 == None else (text.index(heading1) - 3)
     content = text[startIndex:endIndex]
-    # print(content)
     return content
 
 
@@ -290,10 +288,8 @@ def processAllHeadings():
     count = 0
     allowed = False
     for path in md_files:
-        # print(md_files)
         url_path = path.replace(
             "docs/", "").replace("../", "").replace(".md", "")
-        # print(url_path)
         link = "https://docs.fetch.ai/% s" % url_path.lower()
         JSONOBJ = {}
         global sub, head
@@ -306,14 +302,12 @@ def processAllHeadings():
             allowed = False
             continue
         else:
-            # print(path)
             allowed = True
 
         print("Processing % s" % path)
         setCurrentPath(path)
         md_text = getCleanTextFromMd(currentPath)
         headings = getHeadings(md_text)
-        # print(headings)
         title_content = getTitleContent(
             md_text, None if len(headings) == 0 else headings[0])
         
@@ -386,7 +380,6 @@ def processAllHeadings():
         print("Files processed => % s" % len(processed_files))
 
     # Check if all files are processed
-    # print(len(processed_files), len(md_files))
     if len(processed_files) >= len(md_files):
         print("All files have been processed.")
         global Quit_flag
